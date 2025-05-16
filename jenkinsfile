@@ -1,0 +1,256 @@
+pipeline {
+    agent any
+
+    environment {
+        PATH = "$PATH:$HOME/.dotnet/tools"
+        GITLAB_TOKEN = credentials('gitlab-token')
+        PROJECT_ID = '43219865'  
+        GITLAB_API = 'https://gitlab.com/api/v4'
+        FAILURE_REASON = ''
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                echo "Building..."
+                // try-catch not needed unless you want to set failure reason here too
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    try {
+                        echo "Running tests..."
+                        // sh 'dotnet test'
+                    } catch (err) {
+                        env.FAILURE_REASON = 'unit_test'
+                        throw err
+                    }
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube-server') {
+                    sh '''
+                        dotnet tool install --global dotnet-sonarscanner || true
+                        export PATH="$PATH:$HOME/.dotnet/tools"
+                        dotnet sonarscanner begin /k:"weather-api"
+                        dotnet build
+                        dotnet sonarscanner end
+                    '''
+                }
+            }
+        }
+
+        stage('SonarQube Quality Gate Check') {
+            steps {
+                script {
+                    def qualityGate = waitForQualityGate()
+                    echo "SonarQube Status: ${qualityGate.status}"
+
+                    if (qualityGate.status != 'OK') {
+                        env.FAILURE_REASON = 'quality_gate'
+                        error "Quality Gate failed"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            script {
+                postFailureWithReason(env.FAILURE_REASON)
+            }
+        }
+    }
+}
+
+def postFailureWithReason(reason) {
+    try {
+        def mrRef = sh(script: "git symbolic-ref HEAD", returnStdout: true).trim()
+        def matcher = (mrRef =~ /merge-requests\\/(\\d+)\\/head/)
+        if (!matcher || !matcher[0]) {
+            echo "No MR ID found in ref: ${mrRef}"
+            return
+        }
+
+        def mrId = matcher[0][1]
+        def message = buildFailureMessage(reason)
+
+        sh """
+            curl --request POST \
+                 --header "PRIVATE-TOKEN: ${env.GITLAB_TOKEN}" \
+                 --data "body=${URLEncoder.encode(message, "UTF-8")}" \
+                 "${env.GITLAB_API}/projects/${env.PROJECT_ID}/merge_requests/${mrId}/notes"
+        """
+        echo "Comment posted to MR #${mrId}"
+    } catch (err) {
+        echo "⚠️ Failed to post GitLab comment: ${err.getMessage()}"
+    }
+}
+
+def buildFailureMessage(String reason) {
+    switch(reason) {
+        case 'unit_test':
+            return "❌ Jenkins build failed: **Unit tests failed**. Please check the logs: ${env.BUILD_URL}"
+        case 'quality_gate':
+            return "🚫 Jenkins build failed: **SonarQube Quality Gate failed**. Review code issues here: ${env.BUILD_URL}"
+        default:
+            return "❌ Jenkins build failed due to an unknown error. Details: ${env.BUILD_URL}"
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import java.net.URLEncoder
+
+def FAILURE_REASON = ''
+
+pipeline {
+    agent any
+
+    environment {
+        PATH = "$PATH:$HOME/.dotnet/tools"
+        PROJECT_ID = '69606865'
+        GITLAB_API = 'https://gitlab.com/api/v4'
+        
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git url: 'https://gitlab.com/Abdelkoddouss-Ybnelhaj/test.git',
+                    credentialsId: 'f6cbfd2b-1511-4062-b0a8-fb5c556244a6',
+                    branch: 'master'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                script {
+                    try {
+                        echo "Building .NET project..."
+                        sh 'dotnet build --configuration Release'
+                    } catch (err) {
+                        FAILURE_REASON = 'build_failed'
+                        error "Build failed"
+                    }
+                }
+            }
+        }
+
+
+        stage('Test') {
+            steps {
+                script {
+                    try {
+                        echo "Running tests..."
+                        // sh 'dotnet test'
+                    } catch (err) {
+                        FAILURE_REASON = 'unit_test'
+                        throw err
+                    }
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube-server') {
+                    sh '''
+                        dotnet tool install --global dotnet-sonarscanner || true
+                        export PATH="$PATH:$HOME/.dotnet/tools"
+                        dotnet sonarscanner begin /k:"weather-api"
+                        dotnet build
+                        dotnet sonarscanner end
+                    '''
+                }
+            }
+        
+        }
+
+        stage('SonarQube Quality Gate Check') {
+            steps {
+                script {
+                    def qualityGate = waitForQualityGate()
+                    echo "SonarQube Status: ${qualityGate.status}"
+
+                    if (qualityGate.status != 'OK') {
+                        FAILURE_REASON = 'quality_gate'
+                        error "Quality Gate failed"
+                    }
+                }
+            }
+        }
+        stage('Build Docker Images'){
+           steps{
+               sh '''
+               building docker images
+               '''
+           } 
+        }
+        stage('Deploying Docker Images'){
+            steps{
+                sh '''
+                deploying docker images
+                '''
+            }
+        }
+        
+    }
+
+    post {
+        failure {
+            script {
+                def authorEmail = sh(script: "git log -1 --pretty=format:'%ae'", returnStdout: true).trim()
+                emailext(
+                    subject: "Jenkins Build Failed - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: buildFailureMessage(FAILURE_REASON),
+                    to: authorEmail,
+                    from: 'Jenkins <noreply@gmail.com>',
+                    mimeType: 'text/plain'
+                )
+            }
+        }
+        success {
+            script {
+                def authorEmail = sh(script: "git log -1 --pretty=format:'%ae'", returnStdout: true).trim()
+                emailext(
+                    subject: "Jenkins Build Successed - ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                    body: "Success",
+                    to: authorEmail,
+                    from: 'Jenkins <noreply@gmail.com>',
+                    mimeType: 'text/plain'
+                )
+            }
+        }
+    }
+}
+
+def buildFailureMessage(String reason) {
+    switch (reason) {
+        case 'unit_test':
+            return "Jenkins build failed: **Unit tests failed**. Please check the logs: ${env.BUILD_URL}"
+        case 'quality_gate':
+            return "Jenkins build failed: **SonarQube Quality Gate failed**. Review code issues here: ${env.BUILD_URL}"
+        case 'build_failed':
+            return "Jenkins build failed: **Build step failed**. Please fix build errors: ${env.BUILD_URL}"
+        default:
+            return "Jenkins build failed due to an unknown error. Details: ${env.BUILD_URL}"
+    }
+}

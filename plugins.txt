@@ -9,3 +9,5 @@ docker-plugin
 sonar
 sonar-quality-gates
 email-ext
+dependency-check-jenkins-plugin
+zap-pipeline

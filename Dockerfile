@@ -10,6 +10,8 @@ RUN apt-get update && \
         apt-transport-https \
         software-properties-common \
         docker.io && \
+    wget https://github.com/dependency-check/DependencyCheck/releases/download/v12.1.1/dependency-check-12.1.1-release.zip && \
+    unzip dependency-check-12.1.1-release.zip && \
     wget https://packages.microsoft.com/config/debian/11/packages-microsoft-prod.deb -O packages-microsoft-prod.deb && \
     dpkg -i packages-microsoft-prod.deb && \
     apt-get update && \

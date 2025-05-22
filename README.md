@@ -6,7 +6,7 @@ This repository contains a full Jenkins CI/CD pipeline implementation for a mono
 ## 🧾 Table of Contents
 
 - [🧩 Architecture Overview](#architecture-overview)
-- [📦 Stack & Tools](#stack--tools)
+- [📦 Stack & Tools](#stack-&-tools)
 - [📁 Project Structure](#project-structure)
 - [⚙️ Prerequisites](#prerequisites)
 - [🐳 Docker Compose Setup](#Docker-Compose-Setup)
@@ -19,7 +19,7 @@ This repository contains a full Jenkins CI/CD pipeline implementation for a mono
 - [🧪 Troubleshooting](#troubleshooting)
 - [🔗 References](#references)
 
-## Architecture
+## Architecture Overview
 
 ![Alt test](./assets/Jenkins-CICD%20(1).png)
 
